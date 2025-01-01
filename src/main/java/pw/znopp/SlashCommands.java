@@ -15,7 +15,8 @@ public class SlashCommands extends ListenerAdapter {
             guild.updateCommands().addCommands(
                     Commands.slash("create", "Creates a voice channel")
                             .addOption(OptionType.STRING, "channel_name", "The name of the channel", true)
-                            .addOption(OptionType.INTEGER, "max_users", "How many people can join the channel", false),
+                            .addOption(OptionType.INTEGER, "max_users", "How many people can join the channel", false)
+                            .addOption(OptionType.NUMBER, "delay", "In minutes, when should the channel be created", false),
 
                     Commands.slash("commands", "Enable or disable commands in this channel")
                             .addOption(OptionType.BOOLEAN, "enable", "Toggles ability to use commands in this channel", true)
@@ -27,7 +28,7 @@ public class SlashCommands extends ListenerAdapter {
                             .addOption(OptionType.BOOLEAN, "can_join", "Whether they can join or not", true),
 
                     Commands.slash("remove", "Removes a voice channel")
-                            .addOption(OptionType.STRING, "channel_name", "The name of the channel to remove", true)
+                            .addOption(OptionType.STRING, "channel_name", "The name of the channel to remove. Can accept partial names.", true)
 
             ).queue(success -> Main.logger.info("Added slash commands to guild {}", guild.getName()));
         }

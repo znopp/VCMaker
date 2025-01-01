@@ -6,12 +6,17 @@ import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import org.jetbrains.annotations.NotNull;
 import pw.znopp.Main;
 import pw.znopp.Utils.TextChannels;
 import pw.znopp.Utils.VoiceChannels;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class SlashCommandInteraction extends ListenerAdapter {
 
@@ -30,26 +35,75 @@ public class SlashCommandInteraction extends ListenerAdapter {
         }
 
         if (event.getName().equalsIgnoreCase("create")) {
-
             if (!event.getChannel().getId().equals(textChannel)) {
                 event.reply("Commands are not enabled in this channel!").setEphemeral(true).queue();
                 return;
             }
 
-            String channelName = Objects.requireNonNull(event.getOption("channel_name")).getAsString();
+            // Check how many channels the user already has
+            String userId = event.getUser().getId();
+            long userChannelCount = voiceChannels.GetVoiceChannels(event.getJDA())
+                    .entrySet()
+                    .stream()
+                    .filter(entry -> entry.getKey().getGuild().equals(event.getGuild())) // Same guild only
+                    .filter(entry -> entry.getValue().equals(userId))
+                    .count();
+
+            if (userChannelCount >= 4) {
+                event.reply("You already have 4 channels! Please delete one before creating a new one.").setEphemeral(true).queue();
+                return;
+            }
+
             Integer maxUsers = event.getOption("max_users") != null ? Objects.requireNonNull(event.getOption("max_users")).getAsInt() : null;
+            long delay = event.getOption("delay") != null ? (long) Math.ceil(Objects.requireNonNull(event.getOption("delay")).getAsDouble() * 60) : 0;
+
+            String originalChannelName = Objects.requireNonNull(event.getOption("channel_name")).getAsString();
+            String userName = event.getMember().getUser().getName();
+
+            // Calculate maximum length available for the channel name
+            int maxChannelNameLength = 100; // Discord's limit
+            int separatorLength = 1; // Length of the "-" character
+            int counterMaxLength = 1; // Assume max 9 duplicates
+            int maxOriginalNameLength = maxChannelNameLength - userName.length() - separatorLength - counterMaxLength;
+
+            // Truncate original channel name if it's too long
+            if (originalChannelName.length() > maxOriginalNameLength) {
+                originalChannelName = originalChannelName.substring(0, maxOriginalNameLength);
+            }
+
+            String baseChannelName = userName + "-" + originalChannelName;
+            String finalChannelName = baseChannelName;
+
+            int counter = 1;
+            while (!event.getGuild().getVoiceChannelsByName(finalChannelName, true).isEmpty()) {
+                counter++;
+                finalChannelName = baseChannelName + "-" + counter;
+
+                // Check if adding counter would exceed max length
+                if (finalChannelName.length() > maxChannelNameLength) {
+                    // Truncate base name to accommodate counter
+                    int requiredSpace = String.valueOf(counter).length() + 1; // +1 for the separator
+                    baseChannelName = baseChannelName.substring(0, maxChannelNameLength - requiredSpace);
+                    finalChannelName = baseChannelName + "-" + counter;
+                }
+            }
+
+            String determinedChannelName = finalChannelName;
 
             event.deferReply(true).queue();
 
+            String timeMessage = getTimeMessage(delay);
 
-            category.createVoiceChannel(channelName).queue(voice_channel -> {
+            event.getHook().sendMessage(
+                    "Channel ``" + finalChannelName + "`` will be created in " + timeMessage + "!"
+            ).setEphemeral(true).queue();
 
-                // Deny the @everyone role the CONNECT permission
+            category.createVoiceChannel(finalChannelName).queueAfter(delay, TimeUnit.SECONDS, voice_channel -> {
+                // Rest of the channel creation code remains the same...
                 voice_channel.upsertPermissionOverride(Objects.requireNonNull(event.getGuild()).getPublicRole())
                         .deny(Permission.VOICE_CONNECT)
                         .queue();
 
-                // Allow the user who sent the command the CONNECT permission
                 voice_channel.upsertPermissionOverride(Objects.requireNonNull(event.getMember()))
                         .grant(Permission.VOICE_CONNECT)
                         .queue();
@@ -62,10 +116,10 @@ public class SlashCommandInteraction extends ListenerAdapter {
                 voiceChannels.saveVoiceChannels();
                 Main.logger.info("Saved voiceChannels list");
 
-                event.getHook().sendMessage("Voice chanel ``" + channelName + "`` created!").queue();
-
+                event.getHook().sendMessage("Voice channel ``" + determinedChannelName + "`` created! <@" + event.getUser().getId() + ">").setEphemeral(true).queue();
             });
         }
+
 
         if (event.getName().equalsIgnoreCase("commands")) {
 
@@ -78,13 +132,13 @@ public class SlashCommandInteraction extends ListenerAdapter {
                 textChannels.saveTextChannels();
                 Main.logger.info("Added text channel and saved textChannels list");
 
-                event.getHook().sendMessage("Text channel ``" + event.getChannel().getName() + "`` now has commands enabled!").queue();
+                event.getHook().sendMessage("Text channel ``" + event.getChannel().getName() + "`` now has commands enabled!").setEphemeral(true).queue();
             } else {
                 textChannels.RemoveTextChannel(event.getChannel().asTextChannel());
                 textChannels.saveTextChannels();
                 Main.logger.info("Removed text channel and saved textChannels list");
 
-                event.getHook().sendMessage("Text channel ``" + event.getChannel().getName() + "`` now has commands disabled!").queue();
+                event.getHook().sendMessage("Text channel ``" + event.getChannel().getName() + "`` now has commands disabled!").setEphemeral(true).queue();
             }
         }
 
@@ -113,20 +167,25 @@ public class SlashCommandInteraction extends ListenerAdapter {
 
             Guild guild = event.getGuild();
 
+            if (guild == null) {
+                event.reply("The guild is null! Aborting...").setEphemeral(true).queue();
+                return;
+            }
+
             if (canJoin) {
-                guild.retrieveMemberById(allowedUserId).queue(member -> {
-                    voiceChannel.upsertPermissionOverride(member)
-                            .grant(Permission.VOICE_CONNECT)
-                            .queue(success -> event.reply("User <@" + allowedUserId + "> can now access channel `" + channelName + "`!").queue(),
-                                    error -> event.reply("Failed to update permissions for the user!").setEphemeral(true).queue());
-                }, failure -> event.reply("Couldn't find the specified user!").setEphemeral(true).queue());
+                guild.retrieveMemberById(allowedUserId).queue(member -> voiceChannel.upsertPermissionOverride(member)
+                        .grant(Permission.VOICE_CONNECT)
+                        .queue(
+                            success -> event.reply("User <@" + allowedUserId + "> can now access channel `" + channelName + "`!").queue(),
+                            error -> event.reply("Failed to update permissions for the user!").setEphemeral(true).queue()),
+                            failure -> event.reply("Couldn't find the specified user!").setEphemeral(true).queue());
             } else {
-                guild.retrieveMemberById(allowedUserId).queue(member -> {
-                    voiceChannel.upsertPermissionOverride(member)
-                            .deny(Permission.VOICE_CONNECT)
-                            .queue(success -> event.reply("User <@" + allowedUserId + "> can no longer access channel `" + channelName + "`!").queue(),
-                                    error -> event.reply("Failed to update permissions for the user!").setEphemeral(true).queue());
-                }, failure -> event.reply("Couldn't find the specified user!").setEphemeral(true).queue());
+                guild.retrieveMemberById(allowedUserId).queue(member -> voiceChannel.upsertPermissionOverride(member)
+                        .deny(Permission.VOICE_CONNECT)
+                        .queue(
+                            success -> event.reply("User <@" + allowedUserId + "> can no longer access channel `" + channelName + "`!").queue(),
+                            error -> event.reply("Failed to update permissions for the user!").setEphemeral(true).queue()),
+                            failure -> event.reply("Couldn't find the specified user!").setEphemeral(true).queue());
             }
         }
 
@@ -135,10 +194,20 @@ public class SlashCommandInteraction extends ListenerAdapter {
             String channelName = Objects.requireNonNull(event.getOption("channel_name")).getAsString();
             String userId = event.getUser().getId();
 
-            Map<VoiceChannel, String> channels = voiceChannels.GetVoiceChannels(event.getJDA());
+            Map<VoiceChannel, String> channels = voiceChannels.GetVoiceChannels(event.getJDA())
+                    .entrySet()
+                    .stream()
+                    .filter(entry -> entry.getKey().getGuild().equals(event.getGuild())) // Same guild only
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+
+            boolean isAdmin = event.getGuild().getMemberById(event.getUser().getId()).hasPermission(Permission.ADMINISTRATOR);
 
             VoiceChannel voiceChannel = channels.keySet().stream()
-                    .filter(vc -> vc.getName().equalsIgnoreCase(channelName) && channels.get(vc).equals(userId))
+                    .filter(vc ->
+                        vc.getName().contains(channelName) && // Match the name
+                        (isAdmin || channels.get(vc).equals(userId)) // Admins can delete any, non-admins only their own
+                    )
                     .findFirst()
                     .orElse(null);
 
@@ -163,5 +232,34 @@ public class SlashCommandInteraction extends ListenerAdapter {
 
         }
 
+    }
+
+    @NotNull
+    public static String getTimeMessage(long seconds) {
+        if (seconds == 0) return "0 seconds";
+
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long remainingSeconds = seconds % 60;
+
+        List<String> parts = new ArrayList<>();
+
+        if (hours > 0) {
+            parts.add(hours + " hour" + (hours > 1 ? "s" : ""));
+        }
+        if (minutes > 0) {
+            parts.add(minutes + " minute" + (minutes > 1 ? "s" : ""));
+        }
+        if (remainingSeconds > 0) {
+            parts.add(remainingSeconds + " second" + (remainingSeconds > 1 ? "s" : ""));
+        }
+
+        if (parts.size() == 1) {
+            return parts.get(0);
+        }
+        if (parts.size() == 2) {
+            return parts.get(0) + " and " + parts.get(1);
+        }
+        return parts.get(0) + ", " + parts.get(1) + " and " + parts.get(2);
     }
 }
