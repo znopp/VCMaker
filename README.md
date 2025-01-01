@@ -1,5 +1,5 @@
 # VCMaker
- A private-adjacent voice channel creator
+ A private-adjacent voice channel creator for Discord
 
 ---
 
