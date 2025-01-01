@@ -43,3 +43,4 @@ bin/
 hs_err_pid271044.log
 /gradle
 /.idea
+/data
