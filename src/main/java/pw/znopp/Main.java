@@ -14,14 +14,29 @@ import pw.znopp.Events.GuildVoiceUpdate;
 import pw.znopp.Utils.TextChannels;
 import pw.znopp.Utils.VoiceChannels;
 
+import java.io.*;
 import java.util.EnumSet;
-
+import java.util.Properties;
 
 public class Main extends ListenerAdapter {
 
     public static final Logger logger = LoggerFactory.getLogger(Main.class);
+    private static final String CONFIG_FILE = "config.properties";
+    private static Properties config;
+
+    public static Properties getConfig() {
+        return config;
+    }
 
     public static void main(String[] args) {
+        config = loadConfig();
+        String token = config.getProperty("token");
+
+        if (token == null || token.isEmpty()) {
+            logger.error("Bot token not found in config.properties! Please set your token in the config file.");
+            createDefaultConfig();
+            System.exit(1);
+        }
 
         EnumSet<GatewayIntent> intents = EnumSet.of(
                 GatewayIntent.GUILD_MESSAGES,
@@ -32,16 +47,59 @@ public class Main extends ListenerAdapter {
                 GatewayIntent.SCHEDULED_EVENTS
         );
 
-        JDABuilder.createDefault(args[0], intents)
+        JDABuilder.createDefault(token, intents)
                 .addEventListeners(new Main())
                 .addEventListeners(new SlashCommandInteraction())
                 .addEventListeners(new GuildVoiceUpdate())
                 .build();
     }
 
+    private static Properties loadConfig() {
+        Properties properties = new Properties();
+        File configFile = new File(CONFIG_FILE);
+
+        if (!configFile.exists()) {
+            logger.info("Config file not found. Creating default config file...");
+            createDefaultConfig();
+            logger.info("Please set your bot token in " + CONFIG_FILE);
+            System.exit(1);
+        }
+
+        try (InputStream input = new FileInputStream(configFile)) {
+            properties.load(input);
+            logger.info("Configuration loaded successfully");
+        } catch (IOException e) {
+            logger.error("Error loading config.properties file: {}", e.getMessage());
+            System.exit(1);
+        }
+        return properties;
+    }
+
+    private static void createDefaultConfig() {
+        Properties properties = new Properties();
+
+        // If running in console, we can prompt for the token
+        if (System.console() != null) {
+            logger.info("No config file found. Let's create one!");
+            String token = System.console().readLine("Please enter your bot token: ");
+            properties.setProperty("token", token);
+        } else {
+            properties.setProperty("token", "your-token-here");
+        }
+
+        properties.setProperty("maxChannelsPerUser", "4");
+        properties.setProperty("timeoutDuration", "10");
+
+        try (OutputStream output = new FileOutputStream(CONFIG_FILE)) {
+            properties.store(output, "Discord Bot Configuration");
+            logger.info("Config file created at: " + new File(CONFIG_FILE).getAbsolutePath());
+        } catch (IOException e) {
+            logger.error("Error creating config file: {}", e.getMessage());
+        }
+    }
+
     @Override
     public void onReady(ReadyEvent event) {
-
         Main.logger.info("Ready!");
 
         JDA api = event.getJDA();

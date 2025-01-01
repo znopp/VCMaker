@@ -42,15 +42,17 @@ public class SlashCommandInteraction extends ListenerAdapter {
 
             // Check how many channels the user already has
             String userId = event.getUser().getId();
+            int maxChannelsPerUser = Integer.parseInt(Main.getConfig().getProperty("maxChannelsPerUser", "4"));
+
             long userChannelCount = voiceChannels.GetVoiceChannels(event.getJDA())
                     .entrySet()
                     .stream()
-                    .filter(entry -> entry.getKey().getGuild().equals(event.getGuild())) // Same guild only
+                    .filter(entry -> entry.getKey().getGuild().equals(event.getGuild()))
                     .filter(entry -> entry.getValue().equals(userId))
                     .count();
 
-            if (userChannelCount >= 4) {
-                event.reply("You already have 4 channels! Please delete one before creating a new one.").setEphemeral(true).queue();
+            if (userChannelCount >= maxChannelsPerUser) {
+                event.reply("You already have " + maxChannelsPerUser + " channels! Please delete one before creating a new one.").setEphemeral(true).queue();
                 return;
             }
 

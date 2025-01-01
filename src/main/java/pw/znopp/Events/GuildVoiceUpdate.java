@@ -18,6 +18,7 @@ public class GuildVoiceUpdate extends ListenerAdapter {
     @Override
     public void onGuildVoiceUpdate(GuildVoiceUpdateEvent event) {
         AudioChannelUnion channelLeft = event.getChannelLeft();
+        int timeoutDuration = Integer.parseInt(Main.getConfig().getProperty("timeoutDuration", "10"));
 
         if (channelLeft != null) {
             String chan = voiceChannels.GetVoiceChannel(channelLeft.asVoiceChannel());
@@ -36,7 +37,7 @@ public class GuildVoiceUpdate extends ListenerAdapter {
                     VoiceChannels.getInstance().saveVoiceChannels();
                     Main.logger.info("Saved voiceChannels list");
                 }
-            }, 10, TimeUnit.SECONDS);
+            }, timeoutDuration, TimeUnit.SECONDS);
         }
 
         if (event.getChannelJoined() != null && event.getChannelJoined().equals(channelLeft)) {
