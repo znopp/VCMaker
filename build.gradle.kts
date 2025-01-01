@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "pw.znopp"
-version = "0.2-dev"
+version = "1.0"
 description = "A voice channel maker intended for private-adjacent use."
 
 repositories {
