@@ -19,10 +19,3 @@ dependencies {
     implementation("ch.qos.logback:logback-core:1.5.15") // Logback core
     implementation("com.google.code.gson:gson:2.11.0") // Gson
 }
-
-tasks.jar {
-    manifest {
-        attributes["Main-Class"] = "pw.znopp.Main"
-    }
-}
-
