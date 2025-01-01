@@ -9,6 +9,7 @@
   - The text channel must be within a category
 
 - Users can create voice channels with names and optional max user count
+  - The voice channel is always created within the same category as the text channel the command was issued from
 - The voice channel created automatically sets @everyone connect permission to deny, and sets the creator's connect permission to allow
 - Only the creator can use the set-permission command to allow and deny permissions for other users to connect
 - Only the creator can remove the voice channel
